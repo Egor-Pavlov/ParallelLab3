@@ -34,21 +34,25 @@ void* ThrFunc(void* thrArg)
 	{
 		while (results.size() < maxSize)
 		{
+			//ожидаем данные для работы
 			while (thr->num == 0)
 			{
 				thr = (Thread*)thrArg;
 			}
-				//ожидаем данные для работы
+
+			Ready[thr->id] = false; //флаг готовности потока к приему данных
 			
 			t = thr->num;
-			Ready[thr->id] = false; //флаг занятости потока
-			cout << t << " ";
-			p = true;
+			cout << t << " ";//для проверки
+
+			p = true;//результат проверки числа на простоту
+
+			//проверяем простое или нет
 			for (int i = 2; i < sqrt(abs(t)); i++)
 			{
 				if (t % i == 0)
 				{
-					// вывести, что n не простое, так как делится на i
+					//не простое, так как делится на i
 					p = false;
 				}
 			}
@@ -57,12 +61,16 @@ void* ThrFunc(void* thrArg)
 			//Ready[thr->id] = true;
 			thr->num = 0;
 		}
+		//говорим что хотим печатать
 		IneedPrint[thr->id] = true;
+
 		//ждем очередь на доcтуп к файлу
 		while (IdToPrint != thr->id);
+
 		cout << "id " << thr->id << "print"<<endl;
 		//вывод в файл
 		string s;
+		//такой вывод чтобы дописывать в файл, а не писать поверх как через fstream
 		FILE* F = fopen(resultName.c_str(), "a");
 		for (int i = 0; i < maxSize; i++)
 		{
@@ -71,6 +79,8 @@ void* ThrFunc(void* thrArg)
 		}
 		results.clear();
 		fclose(F);
+
+		//передаем очередь на печать тому, чей индекс больше и кто хочет печатать
 		for (size_t i = thr->id + 1; i < countOfThr; i++)
 		{
 			if (IneedPrint[i])
@@ -79,8 +89,11 @@ void* ThrFunc(void* thrArg)
 				break;
 			}
 		}
+		//если никто не хочет печатать то передаем 0-му потоку
 		if (IdToPrint == thr->id)
 			IdToPrint = 0;
+
+		//сброс флага желания печатать и установка флага готовности к приему данных
 		IneedPrint[thr->id] = false;
 		Ready[thr->id] = true;
 	}
