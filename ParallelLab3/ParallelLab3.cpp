@@ -1,10 +1,11 @@
 #include <iostream>
-#include <Windows.h>
 #include <string>
 #include <pthread.h>
 #include <cstdio>
 #include <fstream>
 #include <vector>
+#include <windows.h>
+#include <chrono>
 
 #pragma warning(disable: 4996)
 
@@ -12,9 +13,9 @@ using namespace std;
 
 vector <bool> Ready;
 vector <bool> IneedPrint;
-int countOfThr = 2;
+int countOfThr = 1;
 int IdToPrint;
-int maxSize = 3;
+int maxSize = 1;
 string resultName = "res.txt";
 bool work = true;
 
@@ -32,23 +33,23 @@ void* ThrFunc(void* thrArg)
 	bool p;
 	while (work)
 	{
-		
 		while (results.size() < maxSize)
 		{
 			//ожидаем данные дл€ работы
-			while ((thr->num == t) && (work))
+			while (thr->num == t)
 			{
+				Ready[thr->id] = true;
 				thr = (Thread*)thrArg;
+				Ready[thr->id] = false;
 				
+				if (thr->num != t || !work)
+				{
+					break;
+				}
 			}
-			if (!work)
-			{
-				break;
-			}
-			//Ready[thr->id] = false; //флаг готовности потока к приему данных
-			
+			Ready[thr->id] = false;
+					
 			t = thr->num;
-			cout << t << " ";//дл€ проверки
 
 			p = true;//результат проверки числа на простоту
 
@@ -61,21 +62,22 @@ void* ThrFunc(void* thrArg)
 					p = false;
 				}
 			}
-			
+			Sleep(1);
 			results.push_back(make_pair(t, p));
+			if (!work)
+				break;
+
 			Ready[thr->id] = true;
+			
 		}
 		Ready[thr->id] = false;
 		if (results.size() > 0)
 		{
-			
 			//говорим что хотим печатать
 			IneedPrint[thr->id] = true;
 
 			//ждем очередь на доcтуп к файлу
 			while (IdToPrint != thr->id);
-
-			cout << "id " << thr->id << "print" << endl;
 			//вывод в файл
 			string s;
 			//такой вывод чтобы дописывать в файл, а не писать поверх как через fstream
@@ -95,12 +97,11 @@ void* ThrFunc(void* thrArg)
 			//передаем очередь на печать по кругу
 			if(thr->id == countOfThr - 1)
 				IdToPrint = 0;
+
 			else IdToPrint = thr->id + 1;
-				
 		}
-		//сброс флага желани€ печатать и установка флага готовности к приему данных
+		//сброс флага желани€ печатать
 		IneedPrint[thr->id] = false;
-		Ready[thr->id] = true;
 	}
 	return NULL;
 }
@@ -111,20 +112,30 @@ int main()
 	
 	string fname = "test.txt";
 	IdToPrint = 0;//потоки будут печататьс€ по очереди
+	vector<double>times;
+	
+	int maxcount;
+	cout<<"¬едите максимальное количество потоков дл€ исследовани€"<< endl;
+	cin >> countOfThr;
+	
+	cout<<"¬едите количество результатов работы накапливаемых в 1 потоке"<< endl;
+	cin >> maxSize;
+	
+	cout<<"¬едите им€ файла c входными данными"<< endl;
+	cin >> fname;
+
+	cout<<"¬едите им€ файла дл€ выходных данных"<< endl;
+	cin >> resultName;
+
 
 	//выдел€ем пам€ть под массив идентификаторов потоков
 	pthread_t* threads = (pthread_t*)malloc(countOfThr * sizeof(pthread_t));
 	//выдел€ем пам€ть под массив структур дл€ потоков
 	
 	Thread* ThrArgs = (Thread*)malloc(countOfThr * sizeof(Thread));
-
-	//cout<<"¬едите количество потоков"<< endl;
-	//cin >> countOfThr;
 	
-	//cout<<"¬едите им€ файла c входными данными"<< endl;
-	//cin >> fname;
-
 	work = true;
+	//создаем и запускаем потоки
 	for (int i = 0; i < countOfThr; i++)
 	{
 		ThrArgs[i].num = 0;
@@ -134,10 +145,10 @@ int main()
 		IneedPrint.push_back(false);
 		pthread_create(&(threads[i]), NULL, ThrFunc, &ThrArgs[i]);
 	}
+	
 	ifstream in(fname);
 	string line;
-	bool flag = true;
-
+	//читаем сразу все данные
 	vector<int> nums;
 	if (in.is_open())
 	{
@@ -145,9 +156,11 @@ int main()
 			nums.push_back(stoi(line));
 	}
 	in.close();
-	 
 
-	while(nums.size()>0)
+	//начало отсчета времени вычислени€
+	auto startTime = std::chrono::high_resolution_clock::now();
+
+	while (nums.size() > 0)
 	{
 		for (int j = 0; j < countOfThr; j++)
 		{//ищем первый свободный поток
@@ -160,14 +173,21 @@ int main()
 				break;
 			}
 		}
-		//Sleep(1);
 	}
 
 	work = false;
-
-	//ожидаем выполнение всех потоков
+	
+	//ожидаем окончание выполнени€ всех потоков
 	for (int i = 0; i < countOfThr; i++)
 		pthread_join(threads[i], NULL);
+
+	//окончание отсчета времени
+	auto endTime = std::chrono::high_resolution_clock::now() - startTime;
+	//подсчет времени вычислени€
+	double elapseTime = std::chrono::duration<double>(endTime).count();
+	times.push_back(elapseTime);
+	cout << elapseTime<<endl;
+
   	return 0;
 }
 
