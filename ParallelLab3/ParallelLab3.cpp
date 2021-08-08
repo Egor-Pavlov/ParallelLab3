@@ -12,9 +12,9 @@ using namespace std;
 
 vector <bool> Ready;
 vector <bool> IneedPrint;
-int countOfThr = 1;
+int countOfThr = 2;
 int IdToPrint;
-int maxSize = 5;
+int maxSize = 10;
 string resultName = "res.txt";
 bool work = true;
 
@@ -28,18 +28,21 @@ void* ThrFunc(void* thrArg)
 {
 	vector<pair<int, bool>> results;
 	Thread* thr = (Thread*)thrArg;
-	int t;
+	int t = 0;
 	bool p;
 	while (work)
 	{
 		while (results.size() < maxSize)
 		{
 			//ожидаем данные для работы
-			while (thr->num == 0)
+			while ((thr->num == t) && (work))
 			{
 				thr = (Thread*)thrArg;
 			}
-
+			if (!work)
+			{
+				break;
+			}
 			Ready[thr->id] = false; //флаг готовности потока к приему данных
 			
 			t = thr->num;
@@ -58,41 +61,44 @@ void* ThrFunc(void* thrArg)
 			}
 			
 			results.push_back(make_pair(t, p));
-			//Ready[thr->id] = true;
-			thr->num = 0;
+			Ready[thr->id] = true;
+			//thr->num = 0;
 		}
-		//говорим что хотим печатать
-		IneedPrint[thr->id] = true;
-
-		//ждем очередь на доcтуп к файлу
-		while (IdToPrint != thr->id);
-
-		cout << "id " << thr->id << "print"<<endl;
-		//вывод в файл
-		string s;
-		//такой вывод чтобы дописывать в файл, а не писать поверх как через fstream
-		FILE* F = fopen(resultName.c_str(), "a");
-		for (int i = 0; i < maxSize; i++)
+		if (results.size() > 0)
 		{
-			s = to_string(results[i].first) + " " + to_string(results[i].second) + "\n";
-			fputs(s.c_str(), F);
-		}
-		results.clear();
-		fclose(F);
+			//говорим что хотим печатать
+			IneedPrint[thr->id] = true;
 
-		//передаем очередь на печать тому, чей индекс больше и кто хочет печатать
-		for (size_t i = thr->id + 1; i < countOfThr; i++)
-		{
-			if (IneedPrint[i])
+			//ждем очередь на доcтуп к файлу
+			while (IdToPrint != thr->id);
+
+			cout << "id " << thr->id << "print" << endl;
+			//вывод в файл
+			string s;
+			//такой вывод чтобы дописывать в файл, а не писать поверх как через fstream
+			FILE* F = fopen(resultName.c_str(), "a");
+			for (int i = 0; i < results.size(); i++)
 			{
-				IdToPrint = i;
-				break;
+				s = to_string(results[i].first) + " " + to_string(results[i].second) + "\n";
+				fputs(s.c_str(), F);
 			}
-		}
-		//если никто не хочет печатать то передаем 0-му потоку
-		if (IdToPrint == thr->id)
-			IdToPrint = 0;
+			results.clear();
+			fclose(F);
 
+			//передаем очередь на печать тому, чей индекс больше и кто хочет печатать
+			for (size_t i = thr->id + 1; i < countOfThr; i++)
+			{
+				if (IneedPrint[i])
+				{
+					IdToPrint = i;
+					break;
+				}
+			}
+			//если никто не хочет печатать то передаем 0-му потоку
+			if (IdToPrint == thr->id)
+				IdToPrint = 0;
+
+		}
 		//сброс флага желания печатать и установка флага готовности к приему данных
 		IneedPrint[thr->id] = false;
 		Ready[thr->id] = true;
