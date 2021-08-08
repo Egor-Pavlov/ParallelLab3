@@ -14,7 +14,7 @@ vector <bool> Ready;
 vector <bool> IneedPrint;
 int countOfThr = 2;
 int IdToPrint;
-int maxSize = 10;
+int maxSize = 3;
 string resultName = "res.txt";
 bool work = true;
 
@@ -32,18 +32,20 @@ void* ThrFunc(void* thrArg)
 	bool p;
 	while (work)
 	{
+		
 		while (results.size() < maxSize)
 		{
 			//ожидаем данные для работы
 			while ((thr->num == t) && (work))
 			{
 				thr = (Thread*)thrArg;
+				
 			}
 			if (!work)
 			{
 				break;
 			}
-			Ready[thr->id] = false; //флаг готовности потока к приему данных
+			//Ready[thr->id] = false; //флаг готовности потока к приему данных
 			
 			t = thr->num;
 			cout << t << " ";//для проверки
@@ -62,10 +64,11 @@ void* ThrFunc(void* thrArg)
 			
 			results.push_back(make_pair(t, p));
 			Ready[thr->id] = true;
-			//thr->num = 0;
 		}
+		Ready[thr->id] = false;
 		if (results.size() > 0)
 		{
+			
 			//говорим что хотим печатать
 			IneedPrint[thr->id] = true;
 
@@ -79,25 +82,21 @@ void* ThrFunc(void* thrArg)
 			FILE* F = fopen(resultName.c_str(), "a");
 			for (int i = 0; i < results.size(); i++)
 			{
-				s = to_string(results[i].first) + " " + to_string(results[i].second) + "\n";
+				if(results[i].second)
+					s = to_string(results[i].first) + " - простое\n";
+				else
+					s = to_string(results[i].first) + " - не простое\n";
+
 				fputs(s.c_str(), F);
 			}
 			results.clear();
 			fclose(F);
 
-			//передаем очередь на печать тому, чей индекс больше и кто хочет печатать
-			for (size_t i = thr->id + 1; i < countOfThr; i++)
-			{
-				if (IneedPrint[i])
-				{
-					IdToPrint = i;
-					break;
-				}
-			}
-			//если никто не хочет печатать то передаем 0-му потоку
-			if (IdToPrint == thr->id)
+			//передаем очередь на печать по кругу
+			if(thr->id == countOfThr - 1)
 				IdToPrint = 0;
-
+			else IdToPrint = thr->id + 1;
+				
 		}
 		//сброс флага желания печатать и установка флага готовности к приему данных
 		IneedPrint[thr->id] = false;
@@ -138,30 +137,34 @@ int main()
 	ifstream in(fname);
 	string line;
 	bool flag = true;
+
+	vector<int> nums;
 	if (in.is_open())
 	{
 		while (getline(in, line))
-		{
-			flag = true;
-			while (flag)
-			{
-				for (int i = 0; i < countOfThr; i++)
-				{
-					if (Ready[i] == true)
-					{
-						ThrArgs[i].num = stoi(line);
-						flag = false;
-						break;
-					}
-				}
-				
-			}
-			Sleep(1);//от этого слипа вообще все зависит если он 1 то первый поток делает всю работу, если он меньше или убрать то ниче не работает
-		}
+			nums.push_back(stoi(line));
 	}
 	in.close();
 	 
+
+	while(nums.size()>0)
+	{
+		for (int j = 0; j < countOfThr; j++)
+		{//ищем первый свободный поток
+			if (Ready[j] == true)
+			{
+				//записываем в его аргумент новое значение
+				ThrArgs[j].num = nums.back();
+				Ready[j] = false;
+				nums.pop_back();
+				break;
+			}
+		}
+		//Sleep(1);
+	}
+
 	work = false;
+
 	//ожидаем выполнение всех потоков
 	for (int i = 0; i < countOfThr; i++)
 		pthread_join(threads[i], NULL);
