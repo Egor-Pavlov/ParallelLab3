@@ -10,9 +10,10 @@
 #pragma warning(disable: 4996)
 
 using namespace std;
+//читаем сразу все данные
+vector<int> nums;
 
 vector <bool> Ready;
-vector <bool> IneedPrint;
 int countOfThr = 1;
 int IdToPrint;
 int maxSize = 1;
@@ -22,60 +23,54 @@ bool work = true;
 struct Thread
 {
 	int id;
-	int num;
+	int index;
 };
 
 void* ThrFunc(void* thrArg)
 {
 	vector<pair<int, bool>> results;
 	Thread* thr = (Thread*)thrArg;
-	int t = 0;
+	int t = -1, number;
 	bool p;
 	while (work)
 	{
 		while (results.size() < maxSize)
 		{
 			//ожидаем данные дл€ работы
-			while (thr->num == t)
+			while (thr->index == t)
 			{
 				Ready[thr->id] = true;
-				thr = (Thread*)thrArg;
 				Ready[thr->id] = false;
+				thr = (Thread*)thrArg;
 				
-				if (thr->num != t || !work)
+				if (thr->index != t || !work)
 				{
 					break;
 				}
 			}
-			Ready[thr->id] = false;
-					
-			t = thr->num;
-
-			p = true;//результат проверки числа на простоту
-
-			//провер€ем простое или нет
-			for (int i = 2; i < sqrt(abs(t)); i++)
+			if (thr->index != t)
 			{
-				if (t % i == 0)
-				{
-					//не простое, так как делитс€ на i
-					p = false;
-				}
-			}
-			Sleep(1);
-			results.push_back(make_pair(t, p));
-			if (!work)
-				break;
+				t = thr->index;
+				number = nums[t];
+				p = true;//результат проверки числа на простоту
 
-			Ready[thr->id] = true;
-			
+				//провер€ем простое или нет
+				for (int i = 2; i < sqrt(abs(number)); i++)
+				{
+					if (number % i == 0)
+					{
+						//не простое, так как делитс€ на i
+						p = false;
+					}
+				}
+				Sleep(1);
+				results.push_back(make_pair(number, p));
+			}
+			if (!work)
+				break;			
 		}
-		Ready[thr->id] = false;
 		if (results.size() > 0)
 		{
-			//говорим что хотим печатать
-			IneedPrint[thr->id] = true;
-
 			//ждем очередь на доcтуп к файлу
 			while (IdToPrint != thr->id);
 			//вывод в файл
@@ -85,23 +80,21 @@ void* ThrFunc(void* thrArg)
 			for (int i = 0; i < results.size(); i++)
 			{
 				if(results[i].second)
-					s = to_string(results[i].first) + " - простое\n";
+					s = to_string(results[i].first) + " - простое. поток є " + to_string(thr->id) + "\n";
 				else
-					s = to_string(results[i].first) + " - не простое\n";
+					s = to_string(results[i].first) + " - не простое. поток є  " + to_string(thr->id) + "\n";
 
 				fputs(s.c_str(), F);
 			}
 			results.clear();
 			fclose(F);
-
+			for(int i = 0; i < countOfThr; ++i)
 			//передаем очередь на печать по кругу
 			if(thr->id == countOfThr - 1)
 				IdToPrint = 0;
 
 			else IdToPrint = thr->id + 1;
 		}
-		//сброс флага желани€ печатать
-		IneedPrint[thr->id] = false;
 	}
 	return NULL;
 }
@@ -120,36 +113,34 @@ int main()
 	
 	cout<<"¬едите количество результатов работы накапливаемых в 1 потоке"<< endl;
 	cin >> maxSize;
-	
-	cout<<"¬едите им€ файла c входными данными"<< endl;
-	cin >> fname;
+	//
+	//cout<<"¬едите им€ файла c входными данными"<< endl;
+	//cin >> fname;
 
-	cout<<"¬едите им€ файла дл€ выходных данных"<< endl;
-	cin >> resultName;
-
+	//cout<<"¬едите им€ файла дл€ выходных данных"<< endl;
+	//cin >> resultName
+		
 
 	//выдел€ем пам€ть под массив идентификаторов потоков
 	pthread_t* threads = (pthread_t*)malloc(countOfThr * sizeof(pthread_t));
+
 	//выдел€ем пам€ть под массив структур дл€ потоков
-	
 	Thread* ThrArgs = (Thread*)malloc(countOfThr * sizeof(Thread));
 	
 	work = true;
 	//создаем и запускаем потоки
 	for (int i = 0; i < countOfThr; i++)
 	{
-		ThrArgs[i].num = 0;
+		ThrArgs[i].index = -1;
 		ThrArgs[i].id = i;
 		//запускаем потоки
 		Ready.push_back(true);
-		IneedPrint.push_back(false);
 		pthread_create(&(threads[i]), NULL, ThrFunc, &ThrArgs[i]);
 	}
 	
 	ifstream in(fname);
 	string line;
-	//читаем сразу все данные
-	vector<int> nums;
+
 	if (in.is_open())
 	{
 		while (getline(in, line))
@@ -160,18 +151,19 @@ int main()
 	//начало отсчета времени вычислени€
 	auto startTime = std::chrono::high_resolution_clock::now();
 
-	while (nums.size() > 0)
+	for (int i = 0; i < nums.size(); ++i)
 	{
-		for (int j = 0; j < countOfThr; j++)
+		for (int j = 0; j < countOfThr; ++j)
 		{//ищем первый свободный поток
 			if (Ready[j] == true)
 			{
 				//записываем в его аргумент новое значение
-				ThrArgs[j].num = nums.back();
+				ThrArgs[j].index = i;
 				Ready[j] = false;
-				nums.pop_back();
 				break;
 			}
+			else if (j == countOfThr - 1)
+				j = -1;
 		}
 	}
 
